@@ -8,4 +8,9 @@ public record ElectricityPrice(
 {
     public decimal PriceDkkPerKwh => PriceDkkPerMwh / 1000m;
     public decimal PriceEurPerKwh => PriceEurPerMwh / 1000m;
+
+    public string FormatTimePrice()
+    {
+        return $"{TimeUtc:HH:mm} {PriceDkkPerKwh:F3} kr/kWh";
+    }
 }
