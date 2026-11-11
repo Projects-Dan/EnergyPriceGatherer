@@ -1,36 +1,70 @@
-﻿using System.Reflection.Emit;
+﻿using System.Net;
+using System.Text.Json;
 using PowerPrices.Models;
 using PowerPrices.Data;
 using PowerPrices.Services;
 
+List<ElectricityPrice> electricityPrices;
+DateOnly today = DateOnly.FromDateTime(DateTime.Now);
+DateOnly tomorrow = today.AddDays(1);
+DateOnly dayAfterTomorrow = tomorrow.AddDays(1);
 
-var client = new ApiClient();
-List<ElectricityPrice> electricityPrices = await client.GetElectricityPricesAsync(DateOnly.FromDateTime(DateTime.Now));
-foreach (var p in electricityPrices.Where(p => p.Area == PriceArea.DK1))
+IGetPrices getPrices = new ApiClient();
+
+try
 {
-    Console.WriteLine(p);
+    electricityPrices = await getPrices.GetElectricityPricesAsync(tomorrow);
 }
-
-var prices = FakeData.ForDay(new DateOnly(2026, 11, 6));
-Console.WriteLine($"Count: {prices.Count}");
-
-foreach (var p in prices.Where(p => p.Area == PriceArea.DK1).Take(8))
+catch (HttpRequestException e) when (e.StatusCode is null)
 {
-    Console.WriteLine($"{p.TimeUtc:HH:mm}  {p.PriceDkkPerKwh:F2} kr/kWh");
+    Console.WriteLine("No internet connection or server unreachable");
+    return;
+}
+catch (HttpRequestException e) when (e.StatusCode == HttpStatusCode.TooManyRequests)
+{
+    Console.WriteLine("The API is busy, try again shortly");
+    return;
+}
+catch (HttpRequestException e)
+{
+    Console.WriteLine(e.Message);
+    return;
+}
+catch (InvalidOperationException e)
+{
+    Console.WriteLine(e.Message);
+    return;
+}
+catch (ArgumentOutOfRangeException e)
+{
+    Console.WriteLine(e.Message);
+    return;
+}
+catch (JsonException e)
+{
+    Console.WriteLine(e.Message);
+    return;
 }
 
 var analysePrices = new PriceAnalyzer();
 
+if (!electricityPrices.Any())
+{
+    Console.WriteLine($"Prices for {tomorrow:dd-MM} have not been published yet. Try on {tomorrow.AddDays(-1):dd-MM} again after 13:00.");
+    return;
+}
+
+TimeSpan window = TimeSpan.FromHours(3.5);
 foreach (PriceArea area in Enum.GetValues(typeof(PriceArea)))
 {
     Console.WriteLine($"==={area}===");
-    Print("Cheapest:",analysePrices.FindCheapest(prices, area));
-    Print("Most expensive:",analysePrices.FindMostExpensive(prices, area));
-    var average = analysePrices.FindAverage(prices, area);
+    Print("Cheapest:", analysePrices.FindCheapest(electricityPrices, area));
+    Print("Most expensive:", analysePrices.FindMostExpensive(electricityPrices, area));
+    var average = analysePrices.FindAverage(electricityPrices, area);
     Console.WriteLine($"Average: {average?.ToString("F3") ?? "No data"} kr/kWh");
+    var tempContWindow = analysePrices.CheapestContWindow(electricityPrices, area, window);
+    Console.WriteLine($"Cheapest {window.TotalHours} hour window: {tempContWindow?.FormatContWindow() ?? "No data"}");
 }
-
-Console.WriteLine(analysePrices.CheapestContWindow(prices, PriceArea.DK1, TimeSpan.FromHours(3.5))?.FormatContWindow());
 
 void Print(string label, ElectricityPrice? price)
 {
@@ -40,37 +74,6 @@ void Print(string label, ElectricityPrice? price)
         return;
     }
     Console.WriteLine($"{label} {price.FormatTimePrice()}");
-}
-
-// ===== TESTS: CheapestContWindow =====
-var hourly = TimeSpan.FromHours(1);
-var quarter = TimeSpan.FromMinutes(15);
-
-Test("1. Basic",         MakePrices([5, 4, 1, 1, 1, 9], hourly), TimeSpan.FromHours(3));
-Test("2. Unsorted",      MakePrices([5, 4, 1, 1, 1, 9], hourly).OrderByDescending(p => p.TimeUtc).ToList(), TimeSpan.FromHours(3));
-Test("3. One price",     MakePrices([5], hourly), TimeSpan.FromHours(1));
-Test("4. Window = data", MakePrices([5, 4, 1, 1, 1, 9], hourly), TimeSpan.FromHours(6));
-Test("5. Window > data", MakePrices([5, 4, 1, 1, 1, 9], hourly), TimeSpan.FromHours(7));
-Test("6. 15-min data",   MakePrices([3, 3, 3, 3, 1, 1, 1, 1, 2, 2, 2, 2], quarter), TimeSpan.FromHours(1));
-Test("7. Wrong area",    MakePrices([5, 4, 1, 1, 1, 9], hourly), TimeSpan.FromHours(3), PriceArea.DK2);
-Test("8. Cheapest last", MakePrices([9, 9, 9, 1, 1, 1], hourly), TimeSpan.FromHours(3));
-Test("9. Hourly, 3.5h window",  MakePrices([5, 4, 1, 1, 1, 9], hourly), TimeSpan.FromHours(3.5));
-Test("10. 15-min, 1.5h window", MakePrices([3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 2], quarter), TimeSpan.FromHours(1.5));
-Test("11. Tie → first wins", MakePrices([1, 1, 1, 9, 1, 1, 1], hourly), TimeSpan.FromHours(3));
-
-List<ElectricityPrice> MakePrices(decimal[] kwhPrices, TimeSpan interval)
-{
-    var start = new DateTimeOffset(2026, 11, 8, 0, 0, 0, TimeSpan.Zero);
-    return kwhPrices
-        .Select((price, i) => new ElectricityPrice(
-            start + interval * i, PriceArea.DK1, price * 1000m, price * 1000m / 7.46m))
-        .ToList();
-}
-
-void Test(string name, List<ElectricityPrice> data, TimeSpan window, PriceArea area = PriceArea.DK1)
-{
-    var result = analysePrices.CheapestContWindow(data, area, window);
-    Console.WriteLine($"{name}: {result?.FormatContWindow() ?? "null"}");
 }
 
 

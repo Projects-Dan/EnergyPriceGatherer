@@ -11,6 +11,6 @@ public record ElectricityPrice(
 
     public string FormatTimePrice()
     {
-        return $"{TimeUtc:HH:mm} {PriceDkkPerKwh:F3} kr/kWh";
+        return $"{DanishTime.FromUtc(TimeUtc):HH:mm} {PriceDkkPerKwh:F3} kr/kWh";
     }
 }

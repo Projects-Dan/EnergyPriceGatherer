@@ -2,15 +2,16 @@
 
 namespace PowerPrices.Data;
 
-public static class FakeData
+public class FakeData : IGetPrices
 {
     private const decimal EurToDkk = 7.46m;
     private const int SlotsPerDay = 96; // 24 hours × 4 quarters
 
     // seed: same seed = same "random" prices every run (useful for testing)
-    public static List<ElectricityPrice> ForDay(DateOnly date, int seed = 42)
+    public Task<List<ElectricityPrice>> GetElectricityPricesAsync(DateOnly date)
     {
-        var random = new Random(seed);
+        
+        var random = new Random(42); // Some int value for the seed
         // Simplification: the day starts at midnight UTC
         var start = new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var prices = new List<ElectricityPrice>(SlotsPerDay * 2);
@@ -24,7 +25,7 @@ public static class FakeData
             prices.Add(Create(time, PriceArea.DK2, basePrice * 1.08m, random)); // DK2 ~8% higher
         }
 
-        return prices;
+        return Task.FromResult(prices);
     }
 
     private static ElectricityPrice Create(

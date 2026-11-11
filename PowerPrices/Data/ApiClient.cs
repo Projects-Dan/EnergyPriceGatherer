@@ -3,7 +3,8 @@ using System.Text.Json;
 using PowerPrices.Models;
 
 namespace PowerPrices.Data;
-public class ApiClient
+
+public class ApiClient : IGetPrices
 {
     private static readonly HttpClient Client = new HttpClient();
     private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
