@@ -3,6 +3,14 @@ using PowerPrices.Models;
 using PowerPrices.Data;
 using PowerPrices.Services;
 
+
+var client = new ApiClient();
+List<ElectricityPrice> electricityPrices = await client.GetElectricityPricesAsync(DateOnly.FromDateTime(DateTime.Now));
+foreach (var p in electricityPrices.Where(p => p.Area == PriceArea.DK1))
+{
+    Console.WriteLine(p);
+}
+
 var prices = FakeData.ForDay(new DateOnly(2026, 11, 6));
 Console.WriteLine($"Count: {prices.Count}");
 
@@ -64,4 +72,6 @@ void Test(string name, List<ElectricityPrice> data, TimeSpan window, PriceArea a
     var result = analysePrices.CheapestContWindow(data, area, window);
     Console.WriteLine($"{name}: {result?.FormatContWindow() ?? "null"}");
 }
+
+
 
